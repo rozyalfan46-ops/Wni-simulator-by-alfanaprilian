@@ -1,0 +1,262 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALFAN WNI Simulator</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b1220;color:#fff;font-family:Arial,sans-serif}
+header{padding:17px;background:#14243c;text-align:center;border-bottom:2px solid #38bdf8}
+header h1{margin:0;color:#38bdf8;font-size:23px}
+header p{font-size:12px;color:#aabbd1}
+main{max-width:850px;margin:auto;padding:14px}
+.panel{background:#142238;border:1px solid #2c405c;border-radius:13px;padding:15px;margin-bottom:14px}
+button,select,input{padding:12px;border-radius:9px;border:0;font-size:14px}
+button{background:#0284c7;color:white;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.4}
+input,select{background:#0b1628;color:white;border:1px solid #40536d;width:100%;margin:6px 0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.players{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.player{background:#20334e;padding:11px;border-radius:9px;font-size:13px}
+.player.active{border:2px solid #38bdf8}
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.tile{background:#23364e;border:1px solid #40536d;border-radius:8px;padding:9px 3px;text-align:center;min-height:83px;font-size:11px;position:relative}
+.tile small{display:block;color:#aabbd1;margin-top:5px}
+.tile.current{border:2px solid #facc15;background:#3b3b27}
+.tile.owned{background:#174d43}
+.tile .icon{font-size:19px}
+.dice{font-size:40px;text-align:center}
+.log{height:130px;overflow:auto;font-size:12px;color:#cbd5e1;line-height:1.7}
+.hidden{display:none}
+h2{font-size:17px;margin-top:0}
+footer{text-align:center;color:#8191a7;font-size:11px;padding:20px}
+</style>
+</head>
+<body>
+<header>
+<h1>🇮🇩 ALFAN WNI SIMULATOR</h1>
+<p>Simulasi ekonomi, properti dan kehidupan Indonesia</p>
+</header>
+<main>
+
+<section class="panel" id="setup">
+<h2>Mulai kehidupanmu</h2>
+<label>Jumlah pemain</label>
+<select id="count">
+<option value="2">2 pemain</option>
+<option value="3">3 pemain</option>
+<option value="4">4 pemain</option>
+<option value="5">5 pemain</option>
+<option value="6">6 pemain</option>
+<option value="7">7 pemain</option>
+<option value="8">8 pemain</option>
+</select>
+<div id="names"></div>
+<button style="width:100%;margin-top:12px" onclick="startGame()">MULAI PERMAINAN</button>
+</section>
+
+<section id="game" class="hidden">
+<div class="panel">
+<h2>👥 Daftar warga</h2>
+<div class="players" id="players"></div>
+</div>
+
+<div class="panel">
+<h2>🗺️ Peta perjalanan Indonesia</h2>
+<div class="board" id="board"></div>
+</div>
+
+<div class="panel">
+<h2 id="turn">Giliran pemain</h2>
+<div class="dice" id="dice">🎲</div>
+<p id="instruction" style="text-align:center;color:#cbd5e1">Lempar dadu untuk berjalan.</p>
+<button id="roll" style="width:100%" onclick="rollDice()">🎲 LEMPAR DADU</button>
+<button id="buy" class="hidden" style="width:100%;margin-top:8px" onclick="buyProperty()">BELI PROPERTI</button>
+<button id="next" class="hidden" style="width:100%;margin-top:8px" onclick="nextTurn()">GILIRAN SELANJUTNYA</button>
+</div>
+
+<div class="panel">
+<h2>🏦 Informasi warga</h2>
+<div id="details"></div>
+</div>
+
+<div class="panel">
+<h2>📜 Catatan kejadian</h2>
+<div class="log" id="log">Permainan dimulai. Selamat membangun kehidupan!</div>
+</div>
+</section>
+</main>
+<footer>ALFAN WNI SIMULATOR • Versi demo 1.0<br>Uang dalam permainan adalah uang virtual.</footer>
+
+<script>
+const places=[
+{name:"Jakarta",type:"start",price:0,icon:"🏙️"},
+{name:"Tanah Bandung",type:"property",price:12000000,icon:"🏠"},
+{name:"Pajak Bumi",type:"tax",price:2000000,icon:"🏛️"},
+{name:"Surabaya",type:"property",price:15000000,icon:"🏢"},
+{name:"Bank Indonesia",type:"bank",price:0,icon:"🏦"},
+{name:"Tanah Yogyakarta",type:"property",price:10000000,icon:"🏡"},
+{name:"Pajak Usaha",type:"tax",price:1500000,icon:"📋"},
+{name:"Bali",type:"property",price:20000000,icon:"🌴"},
+{name:"Kantor Kerja",type:"job",price:0,icon:"💼"},
+{name:"Medan",type:"property",price:13000000,icon:"🏬"},
+{name:"Denda",type:"fine",price:1000000,icon:"🚨"},
+{name:"Makassar",type:"property",price:14000000,icon:"🏘️"},
+{name:"Pasar",type:"business",price:0,icon:"🛒"},
+{name:"Semarang",type:"property",price:11000000,icon:"🏠"},
+{name:"Pajak Penghasilan",type:"tax",price:2500000,icon:"💰"},
+{name:"Kalimantan",type:"property",price:17000000,icon:"🌳"}
+];
+let players=[],turn=0,rolled=false,positionLanded=0,owners={};
+const money=n=>"Rp"+n.toLocaleString("id-ID");
+
+document.getElementById("count").onchange=makeNames;
+function makeNames(){
+let n=+document.getElementById("count").value;
+document.getElementById("names").innerHTML="";
+for(let i=0;i<n;i++){
+let input=document.createElement("input");
+input.id="name"+i;input.placeholder="Nama pemain "+(i+1);
+input.value="Pemain "+(i+1);
+document.getElementById("names").appendChild(input);
+}
+}
+makeNames();
+
+function startGame(){
+let n=+document.getElementById("count").value;
+players=[];
+for(let i=0;i<n;i++){
+players.push({
+name:document.getElementById("name"+i).value||"Pemain "+(i+1),
+cash:100000000,pos:0,properties:[],salary:5000000
+});
+}
+turn=0;owners={};rolled=false;
+document.getElementById("setup").classList.add("hidden");
+document.getElementById("game").classList.remove("hidden");
+writeLog("Permainan dimulai dengan "+n+" warga.");
+render();
+}
+
+function writeLog(message){
+let log=document.getElementById("log");
+log.innerHTML+="<br>• "+message;
+log.scrollTop=log.scrollHeight;
+}
+
+function render(){
+document.getElementById("players").innerHTML=players.map((p,i)=>`
+<div class="player ${i===turn?'active':''}">
+<strong>${p.name}</strong><br>
+Saldo: ${money(p.cash)}<br>
+Posisi: ${places[p.pos].name}
+</div>`).join("");
+
+document.getElementById("board").innerHTML=places.map((p,i)=>{
+let owner=owners[i];
+let current=players.some(x=>x.pos===i);
+return `<div class="tile ${current?'current':''} ${owner!==undefined?'owned':''}">
+<div class="icon">${p.icon}</div>
+<strong>${p.name}</strong>
+<small>${owner!==undefined?'Milik '+players[owner].name:p.price?money(p.price):p.type}</small>
+${players.map((x,j)=>x.pos===i?'👤'+(j+1)+' ':'').join("")}
+</div>`;
+}).join("");
+
+let p=players[turn];
+document.getElementById("turn").textContent="Giliran: "+p.name;
+document.getElementById("details").innerHTML=
+"Saldo: <strong>"+money(p.cash)+"</strong><br>"+
+"Gaji per putaran: "+money(p.salary)+"<br>"+
+"Jumlah properti: "+p.properties.length;
+}
+
+function rollDice(){
+if(rolled)return;
+let p=players[turn];
+let dice=Math.floor(Math.random()*6)+1;
+document.getElementById("dice").textContent=["⚀","⚁","⚂","⚃","⚄","⚅"][dice-1];
+let old=p.pos;
+p.pos=(p.pos+dice)%places.length;
+if(p.pos<old){
+p.cash+=p.salary;
+writeLog(p.name+" melewati Jakarta dan menerima gaji "+money(p.salary));
+}
+positionLanded=p.pos;
+rolled=true;
+let tile=places[p.pos];
+let buy=document.getElementById("buy");
+buy.classList.add("hidden");
+document.getElementById("next").classList.remove("hidden");
+document.getElementById("roll").disabled=true;
+document.getElementById("instruction").textContent=
+p.name+" mendapatkan angka "+dice+" dan tiba di "+tile.name;
+resolveTile(p,tile);
+render();
+}
+
+function resolveTile(p,tile){
+let i=p.pos;
+if(tile.type==="tax"||tile.type==="fine"){
+p.cash-=tile.price;
+writeLog(p.name+" membayar "+tile.name+" sebesar "+money(tile.price));
+}else if(tile.type==="job"){
+p.cash+=p.salary;
+writeLog(p.name+" menerima gaji tambahan "+money(p.salary));
+}else if(tile.type==="bank"){
+p.cash+=2000000;
+writeLog(p.name+" mendapat bantuan bank virtual Rp2.000.000");
+}else if(tile.type==="business"){
+p.cash+=3000000;
+writeLog(p.name+" mendapat hasil pasar Rp3.000.000");
+}else if(tile.type==="property"){
+if(owners[i]===undefined){
+document.getElementById("buy").classList.remove("hidden");
+document.getElementById("instruction").textContent=
+tile.name+" tersedia seharga "+money(tile.price);
+}else if(owners[i]!==turn){
+let rent=Math.round(tile.price*.1);
+p.cash-=rent;
+players[owners[i]].cash+=rent;
+writeLog(p.name+" membayar sewa "+money(rent)+" kepada "+players[owners[i]].name);
+}else{
+writeLog(p.name+" mengunjungi propertinya sendiri.");
+}
+}
+if(p.cash<0){
+writeLog(p.name+" mengalami saldo negatif. Perlu mengatur keuangan.");
+}
+}
+
+function buyProperty(){
+let p=players[turn],i=p.pos,tile=places[i];
+if(tile.type!=="property"||owners[i]!==undefined)return;
+if(p.cash<tile.price){
+alert("Saldo tidak mencukupi!");
+return;
+}
+p.cash-=tile.price;
+p.properties.push(i);
+owners[i]=turn;
+document.getElementById("buy").classList.add("hidden");
+writeLog(p.name+" membeli "+tile.name+" seharga "+money(tile.price));
+document.getElementById("instruction").textContent="Properti berhasil dibeli!";
+render();
+}
+
+function nextTurn(){
+turn=(turn+1)%players.length;
+rolled=false;
+document.getElementById("roll").disabled=false;
+document.getElementById("next").classList.add("hidden");
+document.getElementById("buy").classList.add("hidden");
+document.getElementById("dice").textContent="🎲";
+document.getElementById("instruction").textContent="Lempar dadu untuk berjalan.";
+render();
+}
+</script>
+</body>
+</html>
